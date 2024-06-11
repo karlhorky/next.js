@@ -974,7 +974,6 @@ export default class NextNodeServer extends BaseServer<
         delete query._nextBubbleNoFallback
         delete query[NEXT_RSC_UNION_QUERY]
 
-        // If we handled the request, we can return early.
         // For api routes edge runtime
         try {
           const handled = await this.runEdgeFunction({
@@ -986,7 +985,13 @@ export default class NextNodeServer extends BaseServer<
             match,
             appPaths: null,
           })
-          if (handled) return true
+          // If we handled the request, we can return early.
+          if (handled) {
+            const waitUntil = this.getWaitUntil()
+            waitUntil?.(handled.waitUntil)
+
+            return true
+          }
         } catch (apiError) {
           await this.instrumentationOnRequestError(apiError, req, {
             routePath: match.definition.page,
@@ -1945,6 +1950,11 @@ export default class NextNodeServer extends BaseServer<
         params.res.appendHeader(key, value)
       }
     })
+
+    const waitUntil = this.getWaitUntil()
+    if (waitUntil) {
+      waitUntil(result.waitUntil)
+    }
 
     const { originalResponse } = params.res
     if (result.response.body) {
