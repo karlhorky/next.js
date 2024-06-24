@@ -484,6 +484,7 @@ pub async fn get_server_module_options_context(
         enable_typeof_window_inlining: Some(TypeofWindow::Undefined),
         execution_context: Some(execution_context),
         use_swc_css,
+        tree_shaking_mode: Some(TreeShakingMode::ReexportsOnly),
         import_externals: *next_config.import_externals().await?,
         ignore_dynamic_requests: true,
         side_effect_free_packages: next_config.optimize_package_imports().await?.clone_value(),
@@ -542,7 +543,6 @@ pub async fn get_server_module_options_context(
                 enable_typescript_transform: Some(TypescriptTransformOptions::default().cell()),
                 enable_jsx: Some(JsxTransformOptions::default().cell()),
                 custom_rules: foreign_next_server_rules,
-                tree_shaking_mode: None,
                 ..module_options_context.clone()
             };
 
@@ -597,7 +597,6 @@ pub async fn get_server_module_options_context(
             let internal_module_options_context = ModuleOptionsContext {
                 enable_typescript_transform: Some(TypescriptTransformOptions::default().cell()),
                 custom_rules: foreign_next_server_rules,
-                tree_shaking_mode: None,
                 ..module_options_context.clone()
             };
 
@@ -667,7 +666,6 @@ pub async fn get_server_module_options_context(
             let internal_module_options_context = ModuleOptionsContext {
                 enable_typescript_transform: Some(TypescriptTransformOptions::default().cell()),
                 custom_rules: foreign_next_server_rules,
-                tree_shaking_mode: None,
                 ..module_options_context.clone()
             };
             ModuleOptionsContext {
@@ -688,7 +686,6 @@ pub async fn get_server_module_options_context(
                     ),
                 ],
                 custom_rules: next_server_rules,
-                tree_shaking_mode: Some(TreeShakingMode::ReexportsOnly),
                 ..module_options_context
             }
         }
@@ -733,7 +730,6 @@ pub async fn get_server_module_options_context(
             let internal_module_options_context = ModuleOptionsContext {
                 enable_typescript_transform: Some(TypescriptTransformOptions::default().cell()),
                 custom_rules: internal_custom_rules,
-                tree_shaking_mode: None,
                 ..module_options_context.clone()
             };
             ModuleOptionsContext {
@@ -754,7 +750,6 @@ pub async fn get_server_module_options_context(
                     ),
                 ],
                 custom_rules: next_server_rules,
-                tree_shaking_mode: None,
                 ..module_options_context
             }
         }
@@ -816,7 +811,6 @@ pub async fn get_server_module_options_context(
             let internal_module_options_context = ModuleOptionsContext {
                 enable_typescript_transform: Some(TypescriptTransformOptions::default().cell()),
                 custom_rules: internal_custom_rules,
-                tree_shaking_mode: None,
                 ..module_options_context.clone()
             };
             ModuleOptionsContext {
@@ -850,7 +844,7 @@ pub async fn get_server_module_options_context(
 pub fn get_build_module_options_context() -> Vc<ModuleOptionsContext> {
     ModuleOptionsContext {
         enable_typescript_transform: Some(Default::default()),
-        tree_shaking_mode: Some(TreeShakingMode::ModuleFragments),
+        tree_shaking_mode: Some(TreeShakingMode::ReexportsOnly),
         esm_url_rewrite_behavior: Some(UrlRewriteBehavior::Full),
         ..Default::default()
     }
