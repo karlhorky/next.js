@@ -17,7 +17,7 @@ import { HMR_ACTIONS_SENT_TO_BROWSER } from '../server/dev/hot-reloader-types'
 import { isNextRouterError } from './components/is-next-router-error'
 import { handleClientError } from './components/react-dev-overlay/internal/helpers/use-error-handler'
 import AppRouter from './components/app-router'
-import type { InitialRSCPayload } from '../server/app-render/types'
+import type { RSCFlightPayloadTuple } from '../server/app-render/types'
 
 // Patch console.error to collect information about hydration errors
 const origConsoleError = window.console.error
@@ -172,7 +172,12 @@ const initialServerResponse = createFromReadableStream(readable, {
 })
 
 function ServerRoot(): React.ReactNode {
-  const initialRSCPayload = use<InitialRSCPayload>(initialServerResponse)
+  const [initialRSCPayload] = use<RSCFlightPayloadTuple>(initialServerResponse)
+  // This is a typeguard since we're sharing the type that's used for flight responses
+  // for client navigations
+  if (!initialRSCPayload) {
+    throw new Error("Invariant: initialRSCPayload can't be null")
+  }
 
   return <AppRouter initialRSCPayload={initialRSCPayload} />
 }

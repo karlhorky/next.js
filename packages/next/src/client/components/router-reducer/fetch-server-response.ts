@@ -14,7 +14,7 @@ const { createFromFetch } = (
 import type {
   FlightRouterState,
   FlightData,
-  NextFlightResponse,
+  RSCFlightPayloadTuple,
 } from '../../../server/app-render/types'
 import {
   NEXT_ROUTER_PREFETCH_HEADER,
@@ -169,12 +169,16 @@ export async function fetchServerResponse(
     }
 
     // Handle the `fetch` readable stream that can be unwrapped by `React.use`.
-    const [buildId, flightData]: NextFlightResponse = await createFromFetch(
+    // Statically generated pages will include the root RSC data in the first part of the tuple
+    // which this function does not need to know about, so we ignore it.
+    const [, flightDataResult]: RSCFlightPayloadTuple = await createFromFetch(
       Promise.resolve(res),
       {
         callServer,
       }
     )
+
+    const [buildId, flightData] = flightDataResult
 
     if (currentBuildId !== buildId) {
       return doMpaNavigation(res.url)

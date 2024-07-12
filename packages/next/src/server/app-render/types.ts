@@ -223,3 +223,5 @@ export type InitialRSCPayload = {
   /** GlobalError */
   G: React.ComponentType<any>
 }
+
+export type RSCFlightPayloadTuple = [InitialRSCPayload | null, FlightDataPath]

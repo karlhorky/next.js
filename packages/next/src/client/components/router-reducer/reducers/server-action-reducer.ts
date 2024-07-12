@@ -1,7 +1,7 @@
 import type {
-  ActionFlightResponse,
   ActionResult,
   FlightData,
+  RSCFlightPayloadTuple,
 } from '../../../../server/app-render/types'
 import { callServer } from '../../../app-call-server'
 import {
@@ -111,7 +111,7 @@ async function fetchServerAction(
   const contentType = res.headers.get('content-type')
 
   if (contentType === RSC_CONTENT_TYPE_HEADER) {
-    const response: ActionFlightResponse = await createFromFetch(
+    const response: RSCFlightPayloadTuple = await createFromFetch(
       Promise.resolve(res),
       {
         callServer,
@@ -119,8 +119,9 @@ async function fetchServerAction(
     )
 
     if (location) {
+      // TODO: Refactor tuple accessors into a function
       // if it was a redirection, then result is just a regular RSC payload
-      const [, actionFlightData] = (response as any) ?? []
+      const [, [, actionFlightData]] = (response as any) ?? []
       return {
         actionFlightData: actionFlightData,
         redirectLocation,
@@ -128,8 +129,9 @@ async function fetchServerAction(
       }
     }
 
-    // otherwise it's a tuple of [actionResult, actionFlightData]
-    const [actionResult, [, actionFlightData]] = (response as any) ?? []
+    // TODO: Refactor tuple accessors into a function
+    // otherwise it's a tuple of [RSCPayload, actionResult, actionFlightData]
+    const [, [actionResult, [, actionFlightData]]] = (response as any) ?? []
     return {
       actionResult,
       actionFlightData,

@@ -444,7 +444,9 @@ describe('app dir - rsc basics', () => {
       .then(async (response) => {
         const result = await resolveStreamResponse(response)
         expect(result).toContain('component:index.server')
-        expect(result).toMatch(isNextDev ? /0:\["development",/ : /0:\[".*?",/)
+        expect(result).toMatch(
+          isNextDev ? /0:\[null,\["development",/ : /0:\[null,\[".*?",/
+        )
       })
   })
 

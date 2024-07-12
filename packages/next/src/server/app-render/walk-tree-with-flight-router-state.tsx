@@ -1,4 +1,5 @@
 import type {
+  CacheNodeSeedData,
   FlightDataPath,
   FlightRouterState,
   FlightSegmentPath,
@@ -18,8 +19,8 @@ import {
 } from './create-flight-router-state-from-loader-tree'
 import type { CreateSegmentPath, AppRenderContext } from './app-render'
 import { hasLoadingComponentInTree } from './has-loading-component-in-tree'
-import { createComponentTree } from './create-component-tree'
 import { DEFAULT_SEGMENT_KEY } from '../../shared/lib/segment'
+import { createComponentTree } from './create-component-tree'
 
 /**
  * Use router state to decide at what common layout to render the page.
@@ -27,6 +28,7 @@ import { DEFAULT_SEGMENT_KEY } from '../../shared/lib/segment'
  */
 export async function walkTreeWithFlightRouterState({
   createSegmentPath,
+  existingSeedData,
   loaderTreeToFilter,
   parentParams,
   isFirst,
@@ -42,6 +44,7 @@ export async function walkTreeWithFlightRouterState({
   ctx,
   preloadCallbacks,
 }: {
+  existingSeedData?: CacheNodeSeedData
   createSegmentPath: CreateSegmentPath
   loaderTreeToFilter: LoaderTree
   parentParams: { [key: string]: string | string[] }
@@ -98,6 +101,12 @@ export async function walkTreeWithFlightRouterState({
     query
   )
 
+  if (existingSeedData && !isFirst) {
+    throw new Error(
+      "Invariant: existingSeedData can't be provided when not rendering from the root"
+    )
+  }
+
   /**
    * Decide if the current segment is where rendering has to start.
    */
@@ -138,6 +147,13 @@ export async function walkTreeWithFlightRouterState({
     if (shouldSkipComponentTree) {
       // Send only the router state
       return [[overriddenSegment, routerState, null, null]]
+    } else if (existingSeedData) {
+      // if `existingSeedData` is provided, it means that we've already performed the work of rendering the full component tree
+      // and should re-use it. In this scenario, we wouldn't expect to recursively call `walkTreeWithFlightRouterState` again.
+      // as the only valid case for this would be during static generation when we're rendering from the root (as there's no Flight Router State).
+      return [
+        [overriddenSegment, routerState, existingSeedData, rscPayloadHead],
+      ]
     } else {
       // Create component tree using the slice of the loaderTree
       const seedData = await createComponentTree(
