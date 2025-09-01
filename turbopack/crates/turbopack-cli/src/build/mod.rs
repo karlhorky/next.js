@@ -430,7 +430,7 @@ async fn build_internal(
                             Target::Browser => {
                                 chunking_context
                                     .evaluated_chunk_group(
-                                        AssetIdent::from_path(
+                                        AssetIdent::new(AssetIdent::from_path(
                                             build_output_root
                                                 .join(
                                                     ecmascript
@@ -441,7 +441,7 @@ async fn build_internal(
                                                         .unwrap(),
                                                 )?
                                                 .with_extension("entry.js"),
-                                        ),
+                                        )),
                                         ChunkGroup::Entry(
                                             [ResolvedVc::upcast(ecmascript)].into_iter().collect(),
                                         ),
