@@ -1234,7 +1234,7 @@ impl AppEndpoint {
                 {
                     let mut ident = AssetIdent::from_path(project.project_path().owned().await?);
                     ident.add_modifier(rcstr!("client-shared-chunks"));
-                    AssetIdent::new(ident)
+                    ident.cell()
                 },
                 this.app_project.client_runtime_entries(),
                 *module_graphs.full,
@@ -1771,7 +1771,7 @@ impl AppEndpoint {
                                         this.app_project.project().project_path().owned().await?,
                                     );
                                     ident.add_modifier(rcstr!("server-utils"));
-                                    AssetIdent::new(ident)
+                                    ident.cell()
                                 },
                                 // TODO this should be ChunkGroup::Shared
                                 ChunkGroup::Entry(server_utils),

@@ -1396,9 +1396,7 @@ pub async fn analyse_ecmascript_module_internal(
                     debug_assert!(!is_tracing, "unexpected Effect::ImportMeta in tracing mode");
                     if analysis_state.first_import_meta {
                         analysis_state.first_import_meta = false;
-                        analysis.add_code_gen(ImportMetaBinding::new(
-                            source.ident().path().owned().await?,
-                        ));
+                        analysis.add_code_gen(ImportMetaBinding::new(source.ident().path().await?));
                     }
 
                     analysis.add_code_gen(ImportMetaRef::new(ast_path.into()));
@@ -2643,7 +2641,7 @@ async fn handle_free_var_reference(
             ));
         }
         FreeVarReference::InputRelative(kind) => {
-            let source_path = (*state.source).ident().path().owned().await?;
+            let source_path = (*state.source).ident().path().await?;
             let source_path = match kind {
                 InputRelativeConstant::DirName => source_path.parent(),
                 InputRelativeConstant::FileName => source_path,
@@ -3061,9 +3059,7 @@ async fn require_resolve_visitor(
             .primary_sources()
             .await?
             .iter()
-            .map(|&source| async move {
-                Ok(require_resolve(source.ident().path().owned().await?).into())
-            })
+            .map(|&source| async move { Ok(require_resolve(source.ident().path().await?).into()) })
             .try_join()
             .await?;
 
