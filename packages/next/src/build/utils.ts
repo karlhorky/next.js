@@ -36,6 +36,7 @@ import {
   SERVER_PROPS_GET_INIT_PROPS_CONFLICT,
   SERVER_PROPS_SSG_CONFLICT,
   MIDDLEWARE_FILENAME,
+  PROXY_FILENAME,
   INSTRUMENTATION_HOOK_FILENAME,
   WEBPACK_LAYERS,
 } from '../lib/constants'
@@ -95,7 +96,12 @@ export function difference<T>(
 }
 
 export function isMiddlewareFilename(file?: string | null) {
-  return file === MIDDLEWARE_FILENAME || file === `src/${MIDDLEWARE_FILENAME}`
+  return (
+    file === MIDDLEWARE_FILENAME ||
+    file === `src/${MIDDLEWARE_FILENAME}` ||
+    file === PROXY_FILENAME ||
+    file === `src/${PROXY_FILENAME}`
+  )
 }
 
 export function isInstrumentationHookFilename(file?: string | null) {
@@ -428,7 +434,7 @@ export async function printTreeView(
   const middlewareInfo = middlewareManifest.middleware?.['/']
   if (middlewareInfo?.files.length > 0) {
     messages.push([])
-    messages.push(['ƒ Middleware'])
+    messages.push(['ƒ Proxy (Middleware)'])
   }
 
   print(
@@ -1327,7 +1333,10 @@ export function isCustomErrorPage(page: string) {
 
 export function isMiddlewareFile(file: string) {
   return (
-    file === `/${MIDDLEWARE_FILENAME}` || file === `/src/${MIDDLEWARE_FILENAME}`
+    file === `/${MIDDLEWARE_FILENAME}` ||
+    file === `/src/${MIDDLEWARE_FILENAME}` ||
+    file === `/${PROXY_FILENAME}` ||
+    file === `/src/${PROXY_FILENAME}`
   )
 }
 
@@ -1357,9 +1366,10 @@ export function getPossibleMiddlewareFilenames(
   folder: string,
   extensions: string[]
 ) {
-  return extensions.map((extension) =>
-    path.join(folder, `${MIDDLEWARE_FILENAME}.${extension}`)
-  )
+  return extensions.flatMap((extension) => [
+    path.join(folder, `${MIDDLEWARE_FILENAME}.${extension}`),
+    path.join(folder, `${PROXY_FILENAME}.${extension}`),
+  ])
 }
 
 export class NestedMiddlewareError extends Error {
