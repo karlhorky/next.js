@@ -690,7 +690,7 @@ function bindingToApi(
             yield {
               issues: entrypoints.issues,
               diagnostics: entrypoints.diagnostics,
-            } as TurbopackResult<RawEntrypoints>
+            } as TurbopackResult<{}>
           }
         }
       })()

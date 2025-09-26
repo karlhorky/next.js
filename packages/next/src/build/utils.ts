@@ -174,19 +174,32 @@ export function collectRoutesUsingEdgeRuntime(
 }
 
 export function printBuildErrors(
-  entrypoints: TurbopackResult<{} | RawEntrypoints>
+  entrypoints: TurbopackResult<{} | RawEntrypoints>,
+  isDev: boolean
 ) {
+  // Issues that we want to stop the server from executing
+  const topLevelFatalIssues = []
+  // Issues that are true errors, but we believe we can keep running and allow the user to address the issue
   const topLevelErrors = []
+  // Issues that are warnings but should not affect the running of the build
   const topLevelWarnings = []
+
   for (const issue of entrypoints.issues) {
-    if (
-      issue.severity === 'bug' ||
-      issue.severity === 'error' ||
-      issue.severity === 'fatal'
-    ) {
-      topLevelErrors.push(formatIssue(issue))
+    // We only want to completely shut down the server
+    if (issue.severity === 'fatal' || issue.severity === 'bug') {
+      topLevelFatalIssues.push(formatIssue(issue))
     } else if (isRelevantWarning(issue)) {
       topLevelWarnings.push(formatIssue(issue))
+    } else if (issue.severity === 'error') {
+      if (isDev) {
+        // We want to treat errors as recoverable in development
+        // so that we can show the errors in the site and allow users
+        // to respond to the errors when necessary. In production builds
+        // though we want to error out and stop the build process.
+        topLevelErrors.push(formatIssue(issue))
+      } else {
+        topLevelFatalIssues.push(formatIssue(issue))
+      }
     }
   }
 
@@ -199,10 +212,18 @@ export function printBuildErrors(
   }
 
   if (topLevelErrors.length > 0) {
-    throw new Error(
-      `Turbopack build failed with ${
+    console.error(
+      `Turbopack build encountered ${
         topLevelErrors.length
       } errors:\n${topLevelErrors.join('\n')}`
+    )
+  }
+
+  if (topLevelFatalIssues.length > 0) {
+    throw new Error(
+      `Turbopack build failed with ${
+        topLevelFatalIssues.length
+      } errors:\n${topLevelFatalIssues.join('\n')}`
     )
   }
 }
