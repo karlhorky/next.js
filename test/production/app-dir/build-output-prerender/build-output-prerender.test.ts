@@ -76,7 +76,7 @@ describe('build-output-prerender', () => {
                   ✓ cacheComponents
                   ✓ enablePrerenderSourceMaps (enabled by \`experimental.cacheComponents\`)
                   ✓ ppr (enabled by \`experimental.cacheComponents\`)
-                  ✓ rdcForNavigations (enabled by \`experimental.ppr\`)"
+                  ✓ rdcForNavigations (enabled by \`experimental.cacheComponents\`)"
             `)
           } else if (isRspack) {
             expect(getPreambleOutput(next.cliOutput)).toMatchInlineSnapshot(`
@@ -85,7 +85,7 @@ describe('build-output-prerender', () => {
                   ✓ cacheComponents
                   ✓ enablePrerenderSourceMaps (enabled by \`experimental.cacheComponents\`)
                   ✓ ppr (enabled by \`experimental.cacheComponents\`)
-                  ✓ rdcForNavigations (enabled by \`experimental.ppr\`)"
+                  ✓ rdcForNavigations (enabled by \`experimental.cacheComponents\`)"
             `)
           } else {
             expect(getPreambleOutput(next.cliOutput)).toMatchInlineSnapshot(`
@@ -94,7 +94,7 @@ describe('build-output-prerender', () => {
                   ✓ cacheComponents
                   ✓ enablePrerenderSourceMaps (enabled by \`experimental.cacheComponents\`)
                   ✓ ppr (enabled by \`experimental.cacheComponents\`)
-                  ✓ rdcForNavigations (enabled by \`experimental.ppr\`)"
+                  ✓ rdcForNavigations (enabled by \`experimental.cacheComponents\`)"
             `)
           }
         }
@@ -216,7 +216,7 @@ describe('build-output-prerender', () => {
                   ✓ enablePrerenderSourceMaps (enabled by \`--debug-prerender\`)
                   ✓ ppr (enabled by \`experimental.cacheComponents\`)
                   ⨯ prerenderEarlyExit (disabled by \`--debug-prerender\`)
-                  ✓ rdcForNavigations (enabled by \`experimental.ppr\`)
+                  ✓ rdcForNavigations (enabled by \`experimental.cacheComponents\`)
                   ✓ serverSourceMaps (enabled by \`--debug-prerender\`)
                   ⨯ turbopackMinify (disabled by \`--debug-prerender\`)"
             `)
@@ -229,7 +229,7 @@ describe('build-output-prerender', () => {
                   ✓ enablePrerenderSourceMaps (enabled by \`--debug-prerender\`)
                   ✓ ppr (enabled by \`experimental.cacheComponents\`)
                   ⨯ prerenderEarlyExit (disabled by \`--debug-prerender\`)
-                  ✓ rdcForNavigations (enabled by \`experimental.ppr\`)
+                  ✓ rdcForNavigations (enabled by \`experimental.cacheComponents\`)
                   ⨯ serverMinification (disabled by \`--debug-prerender\`)
                   ✓ serverSourceMaps (enabled by \`--debug-prerender\`)"
             `)
@@ -242,7 +242,7 @@ describe('build-output-prerender', () => {
                   ✓ enablePrerenderSourceMaps (enabled by \`--debug-prerender\`)
                   ✓ ppr (enabled by \`experimental.cacheComponents\`)
                   ⨯ prerenderEarlyExit (disabled by \`--debug-prerender\`)
-                  ✓ rdcForNavigations (enabled by \`experimental.ppr\`)
+                  ✓ rdcForNavigations (enabled by \`experimental.cacheComponents\`)
                   ⨯ serverMinification (disabled by \`--debug-prerender\`)
                   ✓ serverSourceMaps (enabled by \`--debug-prerender\`)"
             `)

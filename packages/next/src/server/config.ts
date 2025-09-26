@@ -99,6 +99,13 @@ function checkDeprecations(
 ) {
   warnOptionHasBeenDeprecated(
     userConfig,
+    'experimental.ppr',
+    `\`experimental.ppr\` has been deprecated in favour of \`experimental.cacheComponents\`. Please update your ${configFileName} file accordingly.`,
+    silent
+  )
+
+  warnOptionHasBeenDeprecated(
+    userConfig,
     'amp',
     `Built-in amp support is deprecated and the \`amp\` configuration option will be removed in Next.js 16.`,
     silent
@@ -348,11 +355,28 @@ function assignDefaultsAndValidate(
     )
   }
 
+  if (result.experimental?.ppr) {
+    if (result.experimental.ppr === 'incremental') {
+      throw new Error(
+        '`experimental.ppr` has been deprecated in favour of `experimental.cacheComponents`, `"incremental"` is no longer supported.'
+      )
+    }
+
+    result.experimental.cacheComponents = true
+
+    if (configuredExperimentalFeatures) {
+      addConfiguredExperimentalFeature(
+        configuredExperimentalFeatures,
+        'cacheComponents',
+        true,
+        'enabled by `experimental.ppr`'
+      )
+    }
+  }
+
   if (isStableBuild()) {
     // Prevents usage of certain experimental features outside of canary
-    if (result.experimental?.ppr) {
-      throw new CanaryOnlyError({ feature: 'experimental.ppr' })
-    } else if (result.experimental?.cacheComponents) {
+    if (result.experimental?.cacheComponents) {
       throw new CanaryOnlyError({ feature: 'experimental.cacheComponents' })
     } else if (result.experimental?.turbopackPersistentCaching) {
       throw new CanaryOnlyError({
@@ -1166,7 +1190,7 @@ function assignDefaultsAndValidate(
   // If ppr is enabled and the user hasn't configured rdcForNavigations, we
   // enable it by default.
   if (
-    result.experimental.ppr &&
+    result.experimental.cacheComponents &&
     userConfig.experimental?.rdcForNavigations === undefined
   ) {
     result.experimental.rdcForNavigations = true
@@ -1176,15 +1200,18 @@ function assignDefaultsAndValidate(
         configuredExperimentalFeatures,
         'rdcForNavigations',
         true,
-        'enabled by `experimental.ppr`'
+        'enabled by `experimental.cacheComponents`'
       )
     }
   }
 
   // If rdcForNavigations is enabled, but ppr is not, we throw an error.
-  if (result.experimental.rdcForNavigations && !result.experimental.ppr) {
+  if (
+    result.experimental.rdcForNavigations &&
+    !result.experimental.cacheComponents
+  ) {
     throw new Error(
-      '`experimental.rdcForNavigations` is enabled, but `experimental.ppr` is not.'
+      '`experimental.rdcForNavigations` is enabled, but `experimental.cacheComponents` is not.'
     )
   }
 
