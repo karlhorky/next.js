@@ -11,6 +11,7 @@ pub trait Storage {
         Self: 'l;
 
     fn add(&mut self, key: Self::K, value: Self::V) -> bool;
+    fn extend(&mut self, items: impl Iterator<Item = (Self::K, Self::V)>) -> bool;
     fn insert(&mut self, key: Self::K, value: Self::V) -> Option<Self::V>;
     fn remove(&mut self, key: &Self::K) -> Option<Self::V>;
     fn contains_key(&self, key: &Self::K) -> bool;
@@ -58,6 +59,14 @@ impl<V> Storage for OptionStorage<V> {
         } else {
             false
         }
+    }
+
+    fn extend(&mut self, items: impl Iterator<Item = (Self::K, Self::V)>) -> bool {
+        let mut added = true;
+        for (_, value) in items {
+            added = self.add((), value) && added;
+        }
+        added
     }
 
     fn insert(&mut self, _: (), value: V) -> Option<V> {
@@ -146,6 +155,13 @@ impl<K: Hash + Eq, V> Storage for AutoMapStorage<K, V> {
             }
             auto_hash_map::map::Entry::Occupied(_) => false,
         }
+    }
+
+    fn extend(&mut self, items: impl Iterator<Item = (Self::K, Self::V)>) -> bool {
+        let len = self.map.len();
+        let mut count = 0;
+        self.map.extend(items.inspect(|_| count += 1));
+        self.map.len() == len + count
     }
 
     fn insert(&mut self, key: K, value: V) -> Option<V> {

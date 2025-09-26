@@ -335,6 +335,12 @@ pub trait TaskGuard: Debug {
     #[must_use]
     fn add(&mut self, item: CachedDataItem) -> bool;
     fn add_new(&mut self, item: CachedDataItem);
+    fn extend(
+        &mut self,
+        ty: CachedDataItemType,
+        items: impl Iterator<Item = CachedDataItem>,
+    ) -> bool;
+    fn extend_new(&mut self, ty: CachedDataItemType, items: impl Iterator<Item = CachedDataItem>);
     fn insert(&mut self, item: CachedDataItem) -> Option<CachedDataItemValue>;
     fn update(
         &mut self,
@@ -445,9 +451,45 @@ impl<B: BackingStorage> TaskGuard for TaskGuardImpl<'_, B> {
     }
 
     fn add_new(&mut self, item: CachedDataItem) {
-        self.check_access(item.category());
-        let added = self.add(item);
+        let category = item.category();
+        self.check_access(category);
+        if !self.task_id.is_transient() && item.is_persistent() {
+            self.task.track_modification(category.into_specific());
+        }
+        let added = self.task.add(item);
         assert!(added, "Item already exists");
+    }
+
+    fn extend(
+        &mut self,
+        ty: CachedDataItemType,
+        items: impl Iterator<Item = CachedDataItem>,
+    ) -> bool {
+        let category = ty.category();
+        self.check_access(category);
+        if !self.task_id.is_transient() && ty.is_persistent() {
+            let mut items = items.peekable();
+            // Check if the iterator is empty
+            if items.peek().is_none() {
+                return false;
+            }
+            // TODO this is not optimal as we always track a modification even if nothing is changed
+            self.task.track_modification(category.into_specific());
+            self.task.extend(ty, items)
+        } else {
+            self.task.extend(ty, items)
+        }
+    }
+
+    fn extend_new(&mut self, ty: CachedDataItemType, items: impl Iterator<Item = CachedDataItem>) {
+        let category = ty.category();
+        self.check_access(category);
+        if !self.task_id.is_transient() && ty.is_persistent() {
+            self.task.track_modification(category.into_specific());
+        }
+
+        let added = self.task.extend(ty, items);
+        assert!(added, "At least one item already exists");
     }
 
     fn insert(&mut self, item: CachedDataItem) -> Option<CachedDataItemValue> {
