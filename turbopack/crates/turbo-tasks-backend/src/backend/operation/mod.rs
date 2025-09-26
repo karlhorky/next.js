@@ -471,7 +471,7 @@ impl<B: BackingStorage> TaskGuard for TaskGuardImpl<'_, B> {
             let mut items = items.peekable();
             // Check if the iterator is empty
             if items.peek().is_none() {
-                return false;
+                return true;
             }
             // TODO this is not optimal as we always track a modification even if nothing is changed
             self.task.track_modification(category.into_specific());
