@@ -5,6 +5,7 @@ import type {
 import type { EdgeSSRMeta } from '../loaders/get-module-build-info'
 import type { MiddlewareMatcher } from '../../analysis/get-page-static-info'
 import { getNamedMiddlewareRegex } from '../../../shared/lib/router/utils/route-regex'
+import { getDefaultMiddlewareMatchers } from '../../../server/lib/router-utils/filesystem'
 import { getModuleBuildInfo } from '../loaders/get-module-build-info'
 import { getSortedRoutes } from '../../../shared/lib/router/utils'
 import { webpack, sources } from 'next/dist/compiled/webpack/webpack'
@@ -36,6 +37,7 @@ import type { CustomRoutes } from '../../../lib/load-custom-routes'
 import { isInterceptionRouteRewrite } from '../../../lib/generate-interception-routes-rewrites'
 import { getDynamicCodeEvaluationError } from './wellknown-errors-plugin/parse-dynamic-code-evaluation-error'
 import { getModuleReferencesInOrder } from '../utils'
+import type { NextConfig } from '../../../server/config-shared'
 
 const KNOWN_SAFE_DYNAMIC_PACKAGES =
   require('../../../lib/known-edge-safe-packages.json') as string[]
@@ -204,12 +206,17 @@ function getCreateAssets(params: {
       const { namedRegex } = getNamedMiddlewareRegex(matcherSource, {
         catchAll,
       })
-      const matchers = metadata?.edgeMiddleware?.matchers ?? [
-        {
-          regexp: namedRegex,
-          originalSource: page === '/' && catchAll ? '/:path*' : matcherSource,
-        },
-      ]
+
+      const matchers =
+        metadata?.edgeMiddleware?.matchers ??
+        (page === '/' && catchAll
+          ? getDefaultMiddlewareMatchers({
+              basePath: opts.nextConfig.basePath ?? '',
+              skipMiddlewareNextInternalRoutes: Boolean(
+                opts.nextConfig.skipMiddlewareNextInternalRoutes
+              ),
+            })
+          : [{ regexp: namedRegex, originalSource: matcherSource }])
 
       const isEdgeFunction = !!(metadata.edgeApiFunction || metadata.edgeSSR)
       const edgeFunctionDefinition: EdgeFunctionDefinition = {
@@ -818,6 +825,7 @@ interface Options {
   sriEnabled: boolean
   rewrites: CustomRoutes['rewrites']
   edgeEnvironments: EdgeRuntimeEnvironments
+  nextConfig: Pick<NextConfig, 'basePath' | 'skipMiddlewareNextInternalRoutes'>
 }
 
 export default class MiddlewarePlugin {
@@ -825,10 +833,18 @@ export default class MiddlewarePlugin {
   private readonly sriEnabled: Options['sriEnabled']
   private readonly rewrites: Options['rewrites']
   private readonly edgeEnvironments: EdgeRuntimeEnvironments
+  private readonly nextConfig: Options['nextConfig']
 
-  constructor({ dev, sriEnabled, rewrites, edgeEnvironments }: Options) {
+  constructor({
+    dev,
+    sriEnabled,
+    rewrites,
+    edgeEnvironments,
+    nextConfig,
+  }: Options) {
     this.dev = dev
     this.sriEnabled = sriEnabled
+    this.nextConfig = nextConfig
     this.rewrites = rewrites
     this.edgeEnvironments = edgeEnvironments
   }
@@ -886,6 +902,7 @@ export default class MiddlewarePlugin {
             rewrites: this.rewrites,
             edgeEnvironments: this.edgeEnvironments,
             dev: this.dev,
+            nextConfig: this.nextConfig,
           },
         })
       )

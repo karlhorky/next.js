@@ -31,6 +31,7 @@ import { pathHasPrefix } from '../../../shared/lib/router/utils/path-has-prefix'
 import { normalizeLocalePath } from '../../../shared/lib/i18n/normalize-locale-path'
 import { removePathPrefix } from '../../../shared/lib/router/utils/remove-path-prefix'
 import { getMiddlewareRouteMatcher } from '../../../shared/lib/router/utils/middleware-route-matcher'
+import type { MiddlewareMatcher } from '../../../build/analysis/get-page-static-info'
 import {
   APP_PATH_ROUTES_MANIFEST,
   BUILD_ID_FILE,
@@ -46,6 +47,34 @@ import { RSCPathnameNormalizer } from '../../normalizers/request/rsc'
 import { PrefetchRSCPathnameNormalizer } from '../../normalizers/request/prefetch-rsc'
 import { encodeURIPath } from '../../../shared/lib/encode-uri-path'
 import { isMetadataRouteFile } from '../../../lib/metadata/is-metadata-route'
+
+/**
+ * Generate default middleware matchers that exclude /_next/ internal routes
+ */
+export function getDefaultMiddlewareMatchers(
+  config: Pick<
+    NextConfigComplete,
+    'basePath' | 'skipMiddlewareNextInternalRoutes'
+  >
+): MiddlewareMatcher[] {
+  // If skipMiddlewareNextInternalRoutes is explicitly set to false, match everything
+  if (config.skipMiddlewareNextInternalRoutes === false) {
+    return [{ regexp: '.*', originalSource: '/:path*' }]
+  }
+
+  const basePath = config.basePath || ''
+  // Build the exclusion regex directly - matches all paths except /_next/
+  const excludeRegex = basePath
+    ? `^${basePath}/(?!_next/).*$`
+    : `^/(?!_next/).*$`
+
+  return [
+    {
+      regexp: excludeRegex,
+      originalSource: '/((?!_next/).*)',
+    },
+  ]
+}
 
 export type FsOutput = {
   type:
@@ -311,11 +340,15 @@ export async function setupFsCheck(opts: {
       middlewareMatcher = getMiddlewareRouteMatcher(
         middlewareManifest.middleware?.['/']?.matchers
       )
+    } else if (middlewareManifest.middleware?.['/']) {
+      // Middleware exists but has no matchers - use default with exclusions
+      middlewareMatcher = getMiddlewareRouteMatcher(
+        getDefaultMiddlewareMatchers(opts.config)
+      )
     } else if (functionsConfigManifest?.functions['/_middleware']) {
       middlewareMatcher = getMiddlewareRouteMatcher(
-        functionsConfigManifest.functions['/_middleware'].matchers ?? [
-          { regexp: '.*', originalSource: '/:path*' },
-        ]
+        functionsConfigManifest.functions['/_middleware'].matchers ??
+          getDefaultMiddlewareMatchers(opts.config)
       )
     }
 

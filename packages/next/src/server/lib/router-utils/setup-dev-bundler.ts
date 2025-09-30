@@ -14,7 +14,7 @@ import path from 'path'
 import qs from 'querystring'
 import Watchpack from 'next/dist/compiled/watchpack'
 import findUp from 'next/dist/compiled/find-up'
-import { buildCustomRoute } from './filesystem'
+import { buildCustomRoute, getDefaultMiddlewareMatchers } from './filesystem'
 import * as Log from '../../../build/output/log'
 import { setGlobal } from '../../../trace/shared'
 import type { Telemetry } from '../../../telemetry/storage'
@@ -471,9 +471,11 @@ async function startWatcher(
             'actualMiddlewareFile',
             serverFields.actualMiddlewareFile
           )
-          middlewareMatchers = staticInfo.middleware?.matchers || [
-            { regexp: '^/.*$', originalSource: '/:path*' },
-          ]
+          middlewareMatchers = staticInfo.middleware?.matchers ||
+            getDefaultMiddlewareMatchers({
+              basePath: nextConfig.basePath,
+              skipMiddlewareNextInternalRoutes: nextConfig.skipMiddlewareNextInternalRoutes
+            })
           continue
         }
         if (isInstrumentationHookFile(rootFile)) {
