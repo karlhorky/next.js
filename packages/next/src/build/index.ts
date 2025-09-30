@@ -225,6 +225,7 @@ import {
   writeRouteTypesManifest,
   writeValidatorFile,
 } from '../server/lib/router-utils/route-types-utils'
+import { Lockfile } from './lockfile'
 
 type Fallback = null | boolean | string
 
@@ -948,6 +949,12 @@ export default async function build(
           )
         )
       loadedConfig = config
+      if (config.experimental.lockDistDir) {
+        await Lockfile.acquireOrExit(
+          path.join(config.distDir, 'lock'),
+          'next build'
+        )
+      }
 
       process.env.NEXT_DEPLOYMENT_ID = config.deploymentId || ''
       NextBuildContext.config = config
@@ -1119,7 +1126,7 @@ export default async function build(
       }
 
       if (config.cleanDistDir && !isGenerateMode) {
-        await recursiveDelete(distDir, /^(cache|dev)/)
+        await recursiveDelete(distDir, /^(cache|dev|lock)/)
       }
 
       if (appDir && 'exportPathMap' in config) {

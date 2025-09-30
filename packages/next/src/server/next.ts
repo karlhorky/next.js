@@ -31,6 +31,7 @@ import {
   RouterServerContextSymbol,
   routerServerGlobal,
 } from './lib/router-utils/router-server-context'
+import { Lockfile } from '../build/lockfile'
 
 let ServerImpl: typeof NextNodeServer
 
@@ -308,7 +309,14 @@ export class NextServer implements NextWrapperServer {
   private async getServer() {
     if (!this.serverPromise) {
       this.serverPromise = this[SYMBOL_LOAD_CONFIG]().then(async (conf) => {
-        if (!this.options.dev) {
+        if (this.options.dev) {
+          if (conf.experimental.lockDistDir) {
+            await Lockfile.acquireOrExit(
+              path.join(conf.distDir, 'lock'),
+              'next dev'
+            )
+          }
+        } else {
           if (conf.output === 'standalone') {
             if (!process.env.__NEXT_PRIVATE_STANDALONE_CONFIG) {
               log.warn(
