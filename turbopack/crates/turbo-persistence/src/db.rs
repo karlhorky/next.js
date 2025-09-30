@@ -184,7 +184,7 @@ impl Inner {
 
     /// Creates the directory and initializes it.
     fn create_and_init_directory(path: &Path) -> Result<Self> {
-        fs::create_dir_all(&path)?;
+        fs::create_dir_all(path)?;
         Self::init_directory(path)
     }
 
