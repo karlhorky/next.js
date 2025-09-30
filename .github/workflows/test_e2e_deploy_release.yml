@@ -68,7 +68,7 @@ jobs:
         name: Extract `next` version
         run: echo 'value=${{ fromJson(steps.nextPackageInfo.outputs.value).version }}' >> "$GITHUB_OUTPUT"
 
-  test-deploy:
+  test-deploy-webpack:
     name: Run Deploy Tests (Webpack)
     needs: setup
     uses: ./.github/workflows/build_reusable.yml
@@ -89,7 +89,7 @@ jobs:
   test-deploy-turbopack:
     name: Run Deploy Tests (Turbopack)
     # Run after the webpack tests have completed to avoid rate limits
-    needs: [setup, test-deploy]
+    needs: [setup, test-deploy-webpack]
     uses: ./.github/workflows/build_reusable.yml
     secrets: inherit
     strategy:
@@ -102,7 +102,6 @@ jobs:
         NEXT_E2E_TEST_TIMEOUT=240000 \
         NEXT_TEST_MODE=deploy \
         IS_TURBOPACK_TEST=1 \
-        NEXT_TEST_CONTINUE_ON_ERROR=1 \
         TURBOPACK_BUILD=1 \
         NEXT_EXTERNAL_TESTS_FILTERS="test/deploy-tests-manifest.json" \
         NEXT_TEST_VERSION="${{ github.event.inputs.nextVersion || 'canary' }}" \
@@ -116,7 +115,7 @@ jobs:
       overrideProxyAddress: ${{ inputs.overrideProxyAddress || '' }}
 
   report-test-results-to-datadog:
-    needs: [test-deploy, test-deploy-turbopack]
+    needs: [test-deploy-webpack, test-deploy-turbopack]
     if: ${{ always() }}
 
     runs-on: ubuntu-latest
@@ -207,7 +206,7 @@ jobs:
 
   update-prs:
     name: Update prs as ready for review
-    needs: [test-deploy, test-deploy-turbopack, create-draft-prs]
+    needs: [test-deploy-webpack, test-deploy-turbopack, create-draft-prs]
     if: ${{ needs.test-deploy.result == 'success' && needs.test-deploy-turbopack.result == 'success' && github.repository_owner == 'vercel' && github.event_name == 'release' }}
     runs-on: ubuntu-latest
     strategy:
