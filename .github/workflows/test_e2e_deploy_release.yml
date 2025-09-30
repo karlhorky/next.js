@@ -215,7 +215,7 @@ jobs:
   update-prs:
     name: Update prs as ready for review
     needs: [test-deploy-webpack, test-deploy-turbopack, create-draft-prs]
-    if: ${{ needs.test-deploy.result == 'success' && needs.test-deploy-turbopack.result == 'success' && github.repository_owner == 'vercel' && github.event_name == 'release' }}
+    if: ${{ needs.test-deploy-webpack.result == 'success' && needs.test-deploy-turbopack.result == 'success' && github.repository_owner == 'vercel' && github.event_name == 'release' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
