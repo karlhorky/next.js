@@ -135,6 +135,194 @@ struct Inner {
     current_sequence_number: u32,
 }
 
+impl Inner {
+    /// Performs the initial check on the database directory.
+    fn open_directory<S: ParallelScheduler>(
+        path: &Path,
+        read_only: bool,
+        parallel_scheduler: &S,
+    ) -> Result<Self> {
+        match fs::read_dir(path) {
+            Ok(entries) => {
+                if let Some(result) =
+                    Self::load_directory(path, entries, read_only, parallel_scheduler)
+                        .with_context(|| {
+                            format!("Loading persistence directory {} failed", path.display())
+                        })?
+                {
+                    return Ok(result);
+                }
+                if read_only {
+                    bail!("Failed to open database {}", path.display());
+                }
+                Self::init_directory(path).with_context(|| {
+                    format!(
+                        "Initializing persistence directory {} failed",
+                        path.display()
+                    )
+                })
+            }
+            Err(e) => {
+                if !read_only && e.kind() == std::io::ErrorKind::NotFound {
+                    Self::create_and_init_directory(path).with_context(|| {
+                        format!(
+                            "Creating and initializing persistence directory {} failed",
+                            path.display()
+                        )
+                    })
+                } else {
+                    Err(e).with_context(|| {
+                        format!("Reading persistence directory {} failed", path.display())
+                    })
+                }
+            }
+        }
+    }
+
+    /// Creates the directory and initializes it.
+    fn create_and_init_directory(path: &Path) -> Result<Self> {
+        fs::create_dir_all(&path)?;
+        Self::init_directory(path)
+    }
+
+    /// Initializes the directory by creating the CURRENT file.
+    fn init_directory(path: &Path) -> Result<Self> {
+        let mut current = File::create(path.join("CURRENT"))?;
+        current.write_u32::<BE>(0)?;
+        current.flush()?;
+        Ok(Self {
+            meta_files: Vec::new(),
+            current_sequence_number: 0,
+        })
+    }
+
+    /// Loads an existing database directory and performs cleanup if necessary.
+    fn load_directory<S: ParallelScheduler>(
+        path: &Path,
+        entries: ReadDir,
+        read_only: bool,
+        parallel_scheduler: &S,
+    ) -> Result<Option<Self>> {
+        let mut meta_files = Vec::new();
+        let mut current_file = match File::open(path.join("CURRENT")) {
+            Ok(file) => file,
+            Err(e) => {
+                if !read_only && e.kind() == std::io::ErrorKind::NotFound {
+                    for existing_file in entries {
+                        fs::remove_file(existing_file?.path())?;
+                    }
+                    return Ok(None);
+                } else {
+                    return Err(e).context("Failed to open CURRENT file");
+                }
+            }
+        };
+        let current = current_file.read_u32::<BE>()?;
+        drop(current_file);
+
+        let mut deleted_files = HashSet::new();
+        for entry in entries {
+            let entry = entry.context("Failed to read directory entry")?;
+            let entry_path = entry.path();
+            if let Some(ext) = entry_path.extension().and_then(|s| s.to_str()) {
+                let seq: u32 = entry_path
+                    .file_stem()
+                    .context("File has no file stem")?
+                    .to_str()
+                    .context("File stem is not valid utf-8")?
+                    .parse()?;
+                if deleted_files.contains(&seq) {
+                    continue;
+                }
+                if seq > current {
+                    if !read_only {
+                        fs::remove_file(&entry_path)?;
+                    }
+                } else {
+                    match ext {
+                        "meta" => {
+                            meta_files.push(seq);
+                        }
+                        "del" => {
+                            let mut content = &*fs::read(&entry_path)?;
+                            let mut no_existing_files = true;
+                            while !content.is_empty() {
+                                let seq = content.read_u32::<BE>()?;
+                                deleted_files.insert(seq);
+                                if !read_only {
+                                    // Remove the files that are marked for deletion
+                                    let sst_file = path.join(format!("{seq:08}.sst"));
+                                    let meta_file = path.join(format!("{seq:08}.meta"));
+                                    let blob_file = path.join(format!("{seq:08}.blob"));
+                                    for path in [sst_file, meta_file, blob_file] {
+                                        if fs::exists(&path).with_context(|| {
+                                            format!("Failed to check if file exists: {:?}", path)
+                                        })? {
+                                            fs::remove_file(path)
+                                                .context("Failed to remove file")?;
+                                            no_existing_files = false;
+                                        }
+                                    }
+                                }
+                            }
+                            if !read_only && no_existing_files {
+                                fs::remove_file(&entry_path)
+                                    .context("Failed to remove .del file")?;
+                            }
+                        }
+                        "blob" | "sst" => {
+                            // ignore blobs and sst, they are read when needed
+                        }
+                        _ => {
+                            if !entry_path
+                                .file_name()
+                                .is_some_and(|s| s.as_encoded_bytes().starts_with(b"."))
+                            {
+                                bail!("Unexpected file in persistence directory: {:?}", entry_path);
+                            }
+                        }
+                    }
+                }
+            } else {
+                match entry_path.file_stem().and_then(|s| s.to_str()) {
+                    Some("CURRENT") => {
+                        // Already read
+                    }
+                    Some("LOG") => {
+                        // Ignored, write-only
+                    }
+                    _ => {
+                        if !entry_path
+                            .file_name()
+                            .is_some_and(|s| s.as_encoded_bytes().starts_with(b"."))
+                        {
+                            bail!("Unexpected file in persistence directory: {:?}", entry_path);
+                        }
+                    }
+                }
+            }
+        }
+
+        meta_files.retain(|seq| !deleted_files.contains(seq));
+        meta_files.sort_unstable();
+        let mut meta_files = parallel_scheduler
+            .parallel_map_collect::<_, _, Result<Vec<MetaFile>>>(&meta_files, |&seq| {
+                let meta_file = MetaFile::open(path, seq)?;
+                Ok(meta_file)
+            })?;
+
+        let mut sst_filter = SstFilter::new();
+        for meta_file in meta_files.iter_mut().rev() {
+            sst_filter.apply_filter(meta_file);
+        }
+
+        Ok(Some(Self {
+            meta_files,
+            current_sequence_number: current,
+        }))
+    }
+}
+
 pub struct CommitOptions {
     new_meta_files: Vec<(u32, File)>,
     new_sst_files: Vec<(u32, File)>,
@@ -162,15 +350,12 @@ impl<S: ParallelScheduler + Default> TurboPersistence<S> {
 }
 
 impl<S: ParallelScheduler> TurboPersistence<S> {
-    fn new(path: PathBuf, read_only: bool, parallel_scheduler: S) -> Self {
+    fn new(path: PathBuf, read_only: bool, inner: Inner, parallel_scheduler: S) -> Self {
         Self {
             parallel_scheduler,
             path,
             read_only,
-            inner: RwLock::new(Inner {
-                meta_files: Vec::new(),
-                current_sequence_number: 0,
-            }),
+            inner: RwLock::new(inner),
             active_write_operation: AtomicBool::new(false),
             amqf_cache: AmqfCache::with(
                 AMQF_CACHE_SIZE as usize / AMQF_AVG_SIZE,
@@ -203,9 +388,8 @@ impl<S: ParallelScheduler> TurboPersistence<S> {
     /// properly. Cleanup only requires to read a few bytes from a few files and to delete
     /// files, so it's fast.
     pub fn open_with_parallel_scheduler(path: PathBuf, parallel_scheduler: S) -> Result<Self> {
-        let mut db = Self::new(path, false, parallel_scheduler);
-        db.open_directory(false)?;
-        Ok(db)
+        let inner = Inner::open_directory(&path, false, &parallel_scheduler)?;
+        Ok(Self::new(path, false, inner, parallel_scheduler))
     }
 
     /// Open a TurboPersistence database at the given path in read only mode.
@@ -214,166 +398,8 @@ impl<S: ParallelScheduler> TurboPersistence<S> {
         path: PathBuf,
         parallel_scheduler: S,
     ) -> Result<Self> {
-        let mut db = Self::new(path, true, parallel_scheduler);
-        db.open_directory(false)?;
-        Ok(db)
-    }
-
-    /// Performs the initial check on the database directory.
-    fn open_directory(&mut self, read_only: bool) -> Result<()> {
-        match fs::read_dir(&self.path) {
-            Ok(entries) => {
-                if !self
-                    .load_directory(entries, read_only)
-                    .context("Loading persistence directory failed")?
-                {
-                    if read_only {
-                        bail!("Failed to open database");
-                    }
-                    self.init_directory()
-                        .context("Initializing persistence directory failed")?;
-                }
-                Ok(())
-            }
-            Err(e) => {
-                if !read_only && e.kind() == std::io::ErrorKind::NotFound {
-                    self.create_and_init_directory()
-                        .context("Creating and initializing persistence directory failed")?;
-                    Ok(())
-                } else {
-                    Err(e).context("Failed to open database")
-                }
-            }
-        }
-    }
-
-    /// Creates the directory and initializes it.
-    fn create_and_init_directory(&mut self) -> Result<()> {
-        fs::create_dir_all(&self.path)?;
-        self.init_directory()
-    }
-
-    /// Initializes the directory by creating the CURRENT file.
-    fn init_directory(&mut self) -> Result<()> {
-        let mut current = File::create(self.path.join("CURRENT"))?;
-        current.write_u32::<BE>(0)?;
-        current.flush()?;
-        Ok(())
-    }
-
-    /// Loads an existing database directory and performs cleanup if necessary.
-    fn load_directory(&mut self, entries: ReadDir, read_only: bool) -> Result<bool> {
-        let mut meta_files = Vec::new();
-        let mut current_file = match File::open(self.path.join("CURRENT")) {
-            Ok(file) => file,
-            Err(e) => {
-                if !read_only && e.kind() == std::io::ErrorKind::NotFound {
-                    return Ok(false);
-                } else {
-                    return Err(e).context("Failed to open CURRENT file");
-                }
-            }
-        };
-        let current = current_file.read_u32::<BE>()?;
-        drop(current_file);
-
-        let mut deleted_files = HashSet::new();
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                let seq: u32 = path
-                    .file_stem()
-                    .context("File has no file stem")?
-                    .to_str()
-                    .context("File stem is not valid utf-8")?
-                    .parse()?;
-                if deleted_files.contains(&seq) {
-                    continue;
-                }
-                if seq > current {
-                    if !read_only {
-                        fs::remove_file(&path)?;
-                    }
-                } else {
-                    match ext {
-                        "meta" => {
-                            meta_files.push(seq);
-                        }
-                        "del" => {
-                            let mut content = &*fs::read(&path)?;
-                            let mut no_existing_files = true;
-                            while !content.is_empty() {
-                                let seq = content.read_u32::<BE>()?;
-                                deleted_files.insert(seq);
-                                if !read_only {
-                                    // Remove the files that are marked for deletion
-                                    let sst_file = self.path.join(format!("{seq:08}.sst"));
-                                    let meta_file = self.path.join(format!("{seq:08}.meta"));
-                                    let blob_file = self.path.join(format!("{seq:08}.blob"));
-                                    for path in [sst_file, meta_file, blob_file] {
-                                        if fs::exists(&path)? {
-                                            fs::remove_file(path)?;
-                                            no_existing_files = false;
-                                        }
-                                    }
-                                }
-                            }
-                            if !read_only && no_existing_files {
-                                fs::remove_file(&path)?;
-                            }
-                        }
-                        "blob" | "sst" => {
-                            // ignore blobs and sst, they are read when needed
-                        }
-                        _ => {
-                            if !path
-                                .file_name()
-                                .is_some_and(|s| s.as_encoded_bytes().starts_with(b"."))
-                            {
-                                bail!("Unexpected file in persistence directory: {:?}", path);
-                            }
-                        }
-                    }
-                }
-            } else {
-                match path.file_stem().and_then(|s| s.to_str()) {
-                    Some("CURRENT") => {
-                        // Already read
-                    }
-                    Some("LOG") => {
-                        // Ignored, write-only
-                    }
-                    _ => {
-                        if !path
-                            .file_name()
-                            .is_some_and(|s| s.as_encoded_bytes().starts_with(b"."))
-                        {
-                            bail!("Unexpected file in persistence directory: {:?}", path);
-                        }
-                    }
-                }
-            }
-        }
-
-        meta_files.retain(|seq| !deleted_files.contains(seq));
-        meta_files.sort_unstable();
-        let mut meta_files = self
-            .parallel_scheduler
-            .parallel_map_collect::<_, _, Result<Vec<MetaFile>>>(&meta_files, |&seq| {
-                let meta_file = MetaFile::open(&self.path, seq)?;
-                Ok(meta_file)
-            })?;
-
-        let mut sst_filter = SstFilter::new();
-        for meta_file in meta_files.iter_mut().rev() {
-            sst_filter.apply_filter(meta_file);
-        }
-
-        let inner = self.inner.get_mut();
-        inner.meta_files = meta_files;
-        inner.current_sequence_number = current;
-        Ok(true)
+        let inner = Inner::open_directory(&path, false, &parallel_scheduler)?;
+        Ok(Self::new(path, true, inner, parallel_scheduler))
     }
 
     /// Reads and decompresses a blob file. This is not backed by any cache.
