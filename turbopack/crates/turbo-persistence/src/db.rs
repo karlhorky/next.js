@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     collections::HashSet,
     fs::{self, File, OpenOptions, ReadDir},
-    io::{BufWriter, Write},
+    io::{BufWriter, Seek, Write},
     mem::swap,
     ops::RangeInclusive,
     path::{Path, PathBuf},
@@ -133,6 +133,9 @@ struct Inner {
     meta_files: Vec<MetaFile>,
     /// The current sequence number for the database.
     current_sequence_number: u32,
+    /// The CURRENT file locked exclusively. This prevents multiple processes from opening the
+    /// database at the same time.
+    current_file: Option<File>,
 }
 
 impl Inner {
@@ -188,11 +191,16 @@ impl Inner {
     /// Initializes the directory by creating the CURRENT file.
     fn init_directory(path: &Path) -> Result<Self> {
         let mut current = File::create(path.join("CURRENT"))?;
+        current.try_lock().context(
+            "Failed gain exclusive access to the database. Another process might be using the \
+             database",
+        )?;
         current.write_u32::<BE>(0)?;
         current.flush()?;
         Ok(Self {
             meta_files: Vec::new(),
             current_sequence_number: 0,
+            current_file: Some(current),
         })
     }
 
@@ -204,7 +212,12 @@ impl Inner {
         parallel_scheduler: &S,
     ) -> Result<Option<Self>> {
         let mut meta_files = Vec::new();
-        let mut current_file = match File::open(path.join("CURRENT")) {
+        let mut current_file = match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(false)
+            .open(path.join("CURRENT"))
+        {
             Ok(file) => file,
             Err(e) => {
                 if !read_only && e.kind() == std::io::ErrorKind::NotFound {
@@ -217,8 +230,11 @@ impl Inner {
                 }
             }
         };
+        current_file.try_lock().context(
+            "Failed gain exclusive access to the database. Another process might be using the \
+             database",
+        )?;
         let current = current_file.read_u32::<BE>()?;
-        drop(current_file);
 
         let mut deleted_files = HashSet::new();
         for entry in entries {
@@ -319,6 +335,7 @@ impl Inner {
         Ok(Some(Self {
             meta_files,
             current_sequence_number: current,
+            current_file: Some(current_file),
         }))
     }
 }
@@ -562,7 +579,7 @@ impl<S: ParallelScheduler> TurboPersistence<S> {
         let has_delete_file;
         let mut meta_seq_numbers_to_delete = Vec::new();
 
-        {
+        let mut current_file = {
             let mut inner = self.inner.write();
             for meta_file in inner.meta_files.iter_mut().rev() {
                 sst_filter.apply_filter(meta_file);
@@ -586,7 +603,11 @@ impl<S: ParallelScheduler> TurboPersistence<S> {
                 seq += 1;
             }
             inner.current_sequence_number = seq;
-        }
+            inner
+                .current_file
+                .take()
+                .expect("Multiple concurrent commits are not possible")
+        };
 
         self.parallel_scheduler.block_in_place(|| {
             if has_delete_file {
@@ -614,13 +635,11 @@ impl<S: ParallelScheduler> TurboPersistence<S> {
                 file.sync_all()?;
             }
 
-            let mut current_file = OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .read(false)
-                .open(self.path.join("CURRENT"))?;
+            current_file.seek(std::io::SeekFrom::Start(0))?;
             current_file.write_u32::<BE>(seq)?;
             current_file.sync_all()?;
+
+            self.inner.write().current_file = Some(current_file);
 
             for seq in sst_seq_numbers_to_delete.iter() {
                 fs::remove_file(self.path.join(format!("{seq:08}.sst")))?;
