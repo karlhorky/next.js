@@ -415,7 +415,7 @@ impl<S: ParallelScheduler> TurboPersistence<S> {
         path: PathBuf,
         parallel_scheduler: S,
     ) -> Result<Self> {
-        let inner = Inner::open_directory(&path, false, &parallel_scheduler)?;
+        let inner = Inner::open_directory(&path, true, &parallel_scheduler)?;
         Ok(Self::new(path, true, inner, parallel_scheduler))
     }
 
