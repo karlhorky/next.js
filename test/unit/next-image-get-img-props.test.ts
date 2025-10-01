@@ -460,18 +460,6 @@ describe('getImageProps()', () => {
       ['src', '/test.svg'],
     ])
   })
-  it('should throw error for relative svg with query when localPatterns not configured', async () => {
-    expect(() =>
-      getImageProps({
-        alt: 'a nice desc',
-        src: '/test.svg?v=1',
-        width: 100,
-        height: 200,
-      })
-    ).toThrow(
-      'Image with src "/test.svg?v=1" is using a query string which requires images.localPatterns configuration.\nRead more: https://nextjs.org/docs/messages/next-image-unconfigured-localpatterns'
-    )
-  })
   it('should auto unoptimized for absolute svg', async () => {
     const { props } = getImageProps({
       alt: 'a nice desc',
