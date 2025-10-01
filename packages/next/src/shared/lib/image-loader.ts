@@ -46,6 +46,17 @@ function defaultLoader({
           )
         }
       }
+
+      if (
+        src.includes('?') &&
+        config.localPatterns.length === 1 &&
+        config.localPatterns[0].pathname === '/_next/static/media/**'
+      ) {
+        throw new Error(
+          `Image with src "${src}" is using a query string which requires images.localPatterns configuration.` +
+            `\nRead more: https://nextjs.org/docs/messages/next-image-unconfigured-localpatterns`
+        )
+      }
     }
 
     if (!src.startsWith('/') && (config.domains || config.remotePatterns)) {
