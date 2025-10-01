@@ -83,7 +83,7 @@ jobs:
         NEXT_E2E_TEST_TIMEOUT=240000 \
         NEXT_TEST_MODE=deploy \
         IS_WEBPACK_TEST=1 \
-        NEXT_EXTERNAL_TESTS_FILTERS="test/deploy-tests-manifest.json" \
+        NEXT_EXTERNAL_TESTS_FILTERS="test/webpack-deploy-tests-manifest.json" \
         NEXT_TEST_VERSION="${{ github.event.inputs.nextVersion || 'canary' }}" \
         VERCEL_CLI_VERSION="${{ github.event.inputs.vercelCliVersion || 'vercel@latest' }}" \
         node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e
