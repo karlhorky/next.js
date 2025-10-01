@@ -371,6 +371,16 @@ export class ImageOptimizerCache {
       if (!hasLocalMatch(localPatterns, url)) {
         return { errorMessage: '"url" parameter is not allowed' }
       }
+      if (
+        url.includes('?') &&
+        nextConfig.images?.localPatterns?.length === 1 &&
+        nextConfig.images.localPatterns[0].pathname === '/_next/static/media/**'
+      ) {
+        return {
+          errorMessage:
+            '"url" parameter has search query which requires `images.localPatterns` configuration',
+        }
+      }
     } else {
       let hrefParsed: URL
 
